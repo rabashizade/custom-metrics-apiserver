@@ -32,7 +32,7 @@ verify: verify-gofmt test
 test-adapter-container: build-test-adapter
 	cp test-adapter-deploy/Dockerfile $(TEMP_DIR)
 	cp $(OUT_DIR)/$(ARCH)/test-adapter $(TEMP_DIR)/adapter
-	cd $(TEMP_DIR) && sed -i "s|BASEIMAGE|scratch|g" Dockerfile
+	cd $(TEMP_DIR) && sed -i "s|BASEIMAGE|alpine:3.9|g" Dockerfile
 	sed -i 's|REGISTRY|'${REGISTRY}'|g' test-adapter-deploy/testing-adapter.yaml
 	docker build -t $(REGISTRY)/$(IMAGE)-$(ARCH):$(VERSION) $(TEMP_DIR)
 	rm -rf $(TEMP_DIR)

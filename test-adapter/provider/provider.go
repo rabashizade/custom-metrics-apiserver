@@ -17,6 +17,9 @@ limitations under the License.
 package provider
 
 import (
+	"bytes"
+	"os/exec"
+	"strconv"
 	"net/http"
 	"sync"
 	"time"
@@ -56,7 +59,7 @@ type externalMetric struct {
 
 var (
 	testingExternalMetrics = []externalMetric{
-		{
+		/*{
 			info: provider.ExternalMetricInfo{
 				Metric: "my-external-metric",
 			},
@@ -89,6 +92,17 @@ var (
 			labels: map[string]string{},
 			value: external_metrics.ExternalMetricValue{
 				MetricName:   "other-external-metric",
+				MetricLabels: map[string]string{},
+				Value:        *resource.NewQuantity(44, resource.DecimalSI),
+			},
+		},*/
+		{
+			info: provider.ExternalMetricInfo{
+				Metric: "jobs-number",
+			},
+			labels: map[string]string{},
+			value: external_metrics.ExternalMetricValue{
+				MetricName:   "jobs-number",
 				MetricLabels: map[string]string{},
 				Value:        *resource.NewQuantity(44, resource.DecimalSI),
 			},
@@ -320,6 +334,25 @@ func (p *testingProvider) ListAllMetrics() []provider.CustomMetricInfo {
 	return metrics
 }
 
+// valueForExternalMetric is a helper function to get just the value of a specific metric
+func (p *testingProvider) valueForExternalMetric() (external_metrics.ExternalMetricValue, error) {
+	// TODO: cmd should get REST server's address and port, and the cluster's name from configs
+	cmd := "curl -s http://helix-rest-service.default:30000/admin/v2/clusters/MYCLUSTER/workflows | grep -o \"\\\"\" | wc -l"
+	out, err := exec.Command("/bin/sh", "-c", cmd).Output()
+	if err != nil {
+		return external_metrics.ExternalMetricValue{}, err
+	}
+	trimmed := bytes.TrimRight(out, "\n")
+	jobsNumber,_ := strconv.ParseInt(string(trimmed), 10, 64)
+	jobsNumber = (jobsNumber / 2) - 1
+
+	return external_metrics.ExternalMetricValue{
+		MetricName:   "jobs-number",
+		MetricLabels: map[string]string{},
+		Value:        *resource.NewQuantity(jobsNumber, resource.DecimalSI),
+	}, nil
+}
+
 func (p *testingProvider) GetExternalMetric(namespace string, metricSelector labels.Selector, info provider.ExternalMetricInfo) (*external_metrics.ExternalMetricValueList, error) {
 	p.valuesLock.RLock()
 	defer p.valuesLock.RUnlock()
@@ -328,7 +361,10 @@ func (p *testingProvider) GetExternalMetric(namespace string, metricSelector lab
 	for _, metric := range p.externalMetrics {
 		if metric.info.Metric == info.Metric &&
 			metricSelector.Matches(labels.Set(metric.labels)) {
-			metricValue := metric.value
+			metricValue, err := p.valueForExternalMetric()//metric.value
+			if err != nil {
+				return nil, err
+			}
 			metricValue.Timestamp = metav1.Now()
 			matchingMetrics = append(matchingMetrics, metricValue)
 		}
